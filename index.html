@@ -1,0 +1,82 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Генерация видио Wan 2.1</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero simple-hero">
+      <div>
+        <h1>Генерация видио Wan 2.1</h1>
+      </div>
+    </header>
+
+    <section id="setup-notice" class="notice notice-warn hidden"></section>
+    <section id="error-notice" class="notice notice-error hidden"></section>
+
+    <main class="layout">
+      <section class="panel compose-panel">
+        <div class="panel-head">
+          <h2>Новый запрос</h2>
+          <p>Напиши, что хочешь увидеть в видео.</p>
+        </div>
+
+        <form id="generate-form" class="generate-form">
+          <div class="tier-grid">
+            <label class="tier-card">
+              <input type="radio" name="tier" value="standard" checked>
+              <span class="tier-title">Обычный</span>
+              <span class="tier-subtitle">8 FPS</span>
+            </label>
+            <label class="tier-card premium-card">
+              <input type="radio" name="tier" value="premium">
+              <span class="tier-title">Премиум</span>
+              <span class="tier-subtitle">14 FPS</span>
+            </label>
+          </div>
+
+          <div id="premium-password-wrap" class="premium-password hidden">
+            <label for="premium-password">Пароль для премиум-режима</label>
+            <input id="premium-password" type="password" placeholder="Введите пароль" autocomplete="current-password">
+          </div>
+
+          <label for="prompt" class="sr-only">Prompt</label>
+          <textarea
+            id="prompt"
+            rows="8"
+            placeholder="Например: лиса идёт по зимнему лесу, кинематографично, мягкий свет"
+          ></textarea>
+
+          <div class="form-row">
+            <button type="submit" id="generate-button">Сгенерировать</button>
+            <div id="active-status" class="inline-status">Ожидание запроса.</div>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel history-panel">
+        <div class="panel-head">
+          <h2>История</h2>
+          <p>Последние запросы и готовые видео.</p>
+        </div>
+        <div id="history-list" class="history-list">
+          <div class="empty-history">Пока нет задач. Первый запрос появится здесь.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    window.__WAN_SITE_CONFIG__ = {
+      apiBaseUrl: "https://4796-46-201-252-157.ngrok-free.app",
+      defaultFps: 8,
+      premiumFps: 14
+    };
+  </script>
+  <script src="./script.js"></script>
+</body>
+</html>
+
