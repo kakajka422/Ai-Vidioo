@@ -59,15 +59,6 @@ a {
   line-height: 1;
 }
 
-.hero-copy {
-  margin: 14px 0 0;
-  max-width: 720px;
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1.6;
-}
-
-
 .notice,
 .panel {
   background: var(--panel);
@@ -94,23 +85,60 @@ a {
   border-color: rgba(251, 191, 36, 0.35);
 }
 
-.notice ol {
-  padding-left: 20px;
+.small-note {
   color: var(--muted);
 }
 
-.small-note {
-  color: var(--muted);
+.panel {
+  padding: 22px;
+}
+
+.mobile-settings {
+  margin-bottom: 20px;
+}
+
+.compact-head p {
+  margin-bottom: 14px;
+}
+
+.server-config-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.server-config-row input,
+.premium-password input,
+textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(8, 12, 20, 0.9);
+  color: var(--text);
+  font: inherit;
+}
+
+.server-config-row input:focus,
+.premium-password input:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(94, 234, 212, 0.65);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.15);
+}
+
+.server-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
 }
 
 .layout {
   display: grid;
   grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
   gap: 20px;
-}
-
-.panel {
-  padding: 22px;
 }
 
 .panel-head h2 {
@@ -175,37 +203,13 @@ a {
   font-size: 0.94rem;
 }
 
-.premium-password input {
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(8, 12, 20, 0.9);
-  color: var(--text);
-  font: inherit;
-}
-
-.premium-password input:focus,
-textarea:focus {
-  outline: none;
-  border-color: rgba(94, 234, 212, 0.65);
-  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.15);
-}
-
 .hidden {
   display: none;
 }
 
 textarea {
-  width: 100%;
   resize: vertical;
   min-height: 180px;
-  padding: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 18px;
-  background: rgba(8, 12, 20, 0.9);
-  color: var(--text);
-  font: inherit;
   line-height: 1.5;
 }
 
@@ -230,6 +234,17 @@ button {
 
 button:hover:not(:disabled) {
   transform: translateY(-1px);
+}
+
+.secondary-button,
+.ghost-button {
+  color: var(--text);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.ghost-button {
+  background: transparent;
 }
 
 button:disabled,
@@ -347,16 +362,6 @@ input:disabled {
   justify-content: flex-end;
 }
 
-.progress-label {
-  color: #9ad7ff;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.progress-muted .progress-label {
-  color: var(--muted);
-}
-
 .progress-value {
   color: #d9f2ff;
   font-size: 0.86rem;
@@ -430,29 +435,63 @@ video {
     display: grid;
   }
 
+  .page-shell {
+    width: min(100% - 20px, 1180px);
+  }
 }
 
 @media (max-width: 640px) {
   .page-shell {
-    width: min(100% - 20px, 1180px);
-    padding-top: 20px;
+    padding-top: 16px;
+    padding-bottom: 28px;
   }
 
   .panel,
   .notice {
     border-radius: 20px;
-    padding: 18px;
+    padding: 16px;
   }
 
+  .hero {
+    margin-bottom: 18px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 10vw, 3rem);
+    line-height: 1.05;
+  }
+
+  .server-config-row,
+  .tier-grid,
   .form-row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .server-config-actions {
     align-items: stretch;
   }
 
-  .tier-grid {
-    grid-template-columns: 1fr;
+  .server-config-actions .small-note {
+    width: 100%;
   }
 
   button {
     width: 100%;
+    min-height: 52px;
+  }
+
+  textarea {
+    min-height: 210px;
+    font-size: 16px;
+  }
+
+  .card-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .history-card {
+    padding: 16px;
   }
 }

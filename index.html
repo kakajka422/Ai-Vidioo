@@ -2,9 +2,9 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Генерация видио Wan 2.1</title>
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=3">
 </head>
 <body>
   <div class="page-shell">
@@ -13,6 +13,21 @@
         <h1>Генерация видио Wan 2.1</h1>
       </div>
     </header>
+
+    <section class="panel mobile-settings">
+      <div class="panel-head compact-head">
+        <h2>Подключение</h2>
+        <p>Если ngrok поменялся, вставь новый адрес тут прямо с телефона.</p>
+      </div>
+      <div class="server-config-row">
+        <input id="server-url" type="url" placeholder="https://твой-ngrok.ngrok-free.app" spellcheck="false" autocomplete="off">
+        <button type="button" id="save-server-url" class="secondary-button">Сохранить адрес</button>
+      </div>
+      <div class="server-config-actions">
+        <button type="button" id="reset-server-url" class="ghost-button">Вернуть адрес по умолчанию</button>
+        <div id="server-url-status" class="small-note">Сайт использует адрес из настроек.</div>
+      </div>
+    </section>
 
     <section id="setup-notice" class="notice notice-warn hidden"></section>
     <section id="error-notice" class="notice notice-error hidden"></section>
@@ -76,7 +91,7 @@
       premiumFps: 14
     };
   </script>
-  <script src="./script.js"></script>
+  <script src="./script.js?v=7"></script>
 </body>
 </html>
 

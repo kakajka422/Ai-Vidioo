@@ -9,10 +9,16 @@ const errorNotice = document.getElementById("error-notice");
 const premiumPasswordWrap = document.getElementById("premium-password-wrap");
 const premiumPasswordField = document.getElementById("premium-password");
 const tierInputs = document.querySelectorAll('input[name="tier"]');
+const serverUrlField = document.getElementById("server-url");
+const saveServerUrlButton = document.getElementById("save-server-url");
+const resetServerUrlButton = document.getElementById("reset-server-url");
+const serverUrlStatus = document.getElementById("server-url-status");
 const HISTORY_STORAGE_KEY = "wan-site-api-history-v1";
+const API_BASE_URL_STORAGE_KEY = "wan-site-api-base-url-v1";
 
 const jobs = new Map();
 const activePollers = new Map();
+const mediaBlobUrls = new Map();
 
 function escapeHtml(text) {
   return String(text)
@@ -21,6 +27,116 @@ function escapeHtml(text) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function getDefaultApiBaseUrl() {
+  return String(config.apiBaseUrl || "").trim().replace(/\/$/, "");
+}
+
+function getSavedApiBaseUrl() {
+  try {
+    return String(localStorage.getItem(API_BASE_URL_STORAGE_KEY) || "").trim().replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function getApiBaseUrl() {
+  return getSavedApiBaseUrl() || getDefaultApiBaseUrl();
+}
+
+function resolveAssetUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${getApiBaseUrl()}${raw}`;
+  return `${getApiBaseUrl()}/${raw.replace(/^\/+/, "")}`;
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function parseDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDuration(seconds) {
+  const safe = Math.max(0, Math.round(Number(seconds || 0)));
+  const minutes = Math.floor(safe / 60);
+  const remainingSeconds = safe % 60;
+  if (minutes <= 0) {
+    return `${remainingSeconds} сек`;
+  }
+  if (remainingSeconds === 0) {
+    return `${minutes} мин`;
+  }
+  return `${minutes} мин ${remainingSeconds} сек`;
+}
+
+function getEstimatedProgress(job) {
+  if (!job) return 0;
+  if (job.status === "done") return 100;
+  if (job.status === "error") return Math.max(0, Math.min(99, Number(job.progress_percent || 0)));
+  if (job.status === "queued") return 0;
+
+  const startedAt = parseDate(job.started_at);
+  const estimatedTotal = Number(job.estimated_total_seconds || 0);
+  if (!startedAt || estimatedTotal <= 0) {
+    return Math.max(1, Math.min(95, Number(job.progress_percent || 1)));
+  }
+
+  const elapsedSeconds = Math.max(0, (Date.now() - startedAt.getTime()) / 1000);
+  const estimatedPercent = Math.round((elapsedSeconds / estimatedTotal) * 100);
+  return Math.max(3, Math.min(95, estimatedPercent));
+}
+
+function getEstimatedProgressText(job) {
+  if (!job || job.status !== "running") {
+    return "";
+  }
+  const startedAt = parseDate(job.started_at);
+  const estimatedTotal = Number(job.estimated_total_seconds || 0);
+  if (!startedAt || estimatedTotal <= 0) {
+    return "";
+  }
+
+  const elapsedSeconds = Math.max(0, (Date.now() - startedAt.getTime()) / 1000);
+  const remainingSeconds = Math.max(0, estimatedTotal - elapsedSeconds);
+  return `Примерно осталось: ${formatDuration(remainingSeconds)}`;
+}
+
+function setServerUrlStatus(message, isError = false) {
+  if (!serverUrlStatus) return;
+  serverUrlStatus.textContent = message;
+  serverUrlStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
+}
+
+function refreshServerUrlField() {
+  if (!serverUrlField) return;
+  serverUrlField.value = getApiBaseUrl();
+  const isCustom = Boolean(getSavedApiBaseUrl());
+  setServerUrlStatus(isCustom ? "Используется твой сохранённый адрес сервера." : "Используется адрес по умолчанию.");
+}
+
+function saveApiBaseUrl(value) {
+  const normalized = String(value || "").trim().replace(/\/$/, "");
+  if (!/^https?:\/\//i.test(normalized)) {
+    throw new Error("Вставь полный адрес, например https://abcd.ngrok-free.app");
+  }
+  localStorage.setItem(API_BASE_URL_STORAGE_KEY, normalized);
+  refreshServerUrlField();
+  return normalized;
+}
+
+function resetApiBaseUrl() {
+  localStorage.removeItem(API_BASE_URL_STORAGE_KEY);
+  refreshServerUrlField();
 }
 
 function getSelectedTier() {
@@ -50,14 +166,7 @@ function hideNotice(element) {
 }
 
 function apiUrl(path = "") {
-  return `${String(config.apiBaseUrl || "").replace(/\/$/, "")}${path}`;
-}
-
-function formatDate(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return `${getApiBaseUrl()}${path}`;
 }
 
 function saveHistory() {
@@ -91,13 +200,87 @@ function clearBrokenHistory() {
   }
 }
 
+async function fetchMediaBlob(remoteUrl) {
+  if (!remoteUrl) return "";
+  if (mediaBlobUrls.has(remoteUrl)) {
+    return mediaBlobUrls.get(remoteUrl);
+  }
+
+  const response = await fetch(remoteUrl, {
+    headers: {
+      "ngrok-skip-browser-warning": "true",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Не удалось загрузить видеофайл (${response.status}).`);
+  }
+
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("text/html") || contentType.includes("text/plain")) {
+    throw new Error("Сервер вместо видео вернул страницу или текст. Проверь ngrok и FastAPI.");
+  }
+
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  mediaBlobUrls.set(remoteUrl, blobUrl);
+  return blobUrl;
+}
+
+async function hydrateMedia(card) {
+  const video = card.querySelector("video[data-remote-src]");
+  const openLink = card.querySelector("a[data-open-href]");
+  const downloadLink = card.querySelector("a[data-download-href]");
+  if (!video || !openLink || !downloadLink) return;
+
+  const remoteVideoUrl = video.dataset.remoteSrc;
+  const remoteDownloadUrl = downloadLink.dataset.downloadHref || remoteVideoUrl;
+  if (!remoteVideoUrl) return;
+
+  openLink.href = remoteVideoUrl;
+  downloadLink.href = remoteDownloadUrl;
+
+  if (video.dataset.ready === "1" || video.dataset.ready === "loading") return;
+  video.dataset.ready = "loading";
+
+  try {
+    const blobUrl = await fetchMediaBlob(remoteVideoUrl);
+    video.src = blobUrl;
+    downloadLink.href = blobUrl;
+    downloadLink.setAttribute("download", remoteDownloadUrl.split("/").pop() || "result.mp4");
+    video.dataset.ready = "1";
+  } catch (error) {
+    video.dataset.ready = "error";
+    const oldError = card.querySelector(".media-error");
+    if (oldError) oldError.remove();
+    const errorText = document.createElement("p");
+    errorText.className = "error-text media-error";
+    errorText.textContent = error.message || "Не удалось загрузить видео.";
+    video.insertAdjacentElement("afterend", errorText);
+  }
+}
+
+function hydrateAllMedia() {
+  const cards = historyList.querySelectorAll(".history-card");
+  cards.forEach((card) => {
+    hydrateMedia(card);
+  });
+}
+
 function renderJobCard(job) {
-  const progressPercent = Math.max(0, Math.min(100, Number(job.progress_percent || 0)));
+  const progressPercent = getEstimatedProgress(job);
+  const progressHint = getEstimatedProgressText(job);
   const errorBlock = job.error ? `<p class="error-text">${escapeHtml(job.error)}</p>` : "";
-  const videoBlock = job.video_url
+  const hintBlock = progressHint ? `<p class="small-note">${escapeHtml(progressHint)}</p>` : "";
+  const videoUrl = resolveAssetUrl(job.video_url);
+  const downloadUrl = resolveAssetUrl(job.download_url || job.video_url);
+  const videoBlock = videoUrl
     ? `
-      <video controls preload="metadata" src="${job.video_url}"></video>
-      <a class="download-link" href="${job.download_url}" download>Скачать результат</a>
+      <video controls playsinline preload="metadata" data-remote-src="${videoUrl}"></video>
+      <div class="media-links">
+        <a class="download-link" data-open-href="${videoUrl}" href="${videoUrl}" target="_blank" rel="noopener noreferrer">Открыть видео</a>
+        <a class="download-link" data-download-href="${downloadUrl}" href="${downloadUrl}" target="_blank" rel="noopener noreferrer">Скачать результат</a>
+      </div>
     `
     : "";
 
@@ -118,6 +301,7 @@ function renderJobCard(job) {
         </div>
         <div class="progress-bar"><span style="width: ${progressPercent}%"></span></div>
       </div>
+      ${hintBlock}
       ${errorBlock}
       ${videoBlock}
     </article>
@@ -134,6 +318,8 @@ function upsertJobCard(job, prepend = false) {
 
   if (existing) {
     existing.outerHTML = markup;
+    const newCard = historyList.querySelector(`[data-job-id="${job.job_id}"]`);
+    if (newCard) hydrateMedia(newCard);
     return;
   }
 
@@ -144,6 +330,17 @@ function upsertJobCard(job, prepend = false) {
     historyList.insertAdjacentHTML("afterbegin", markup);
   } else {
     historyList.insertAdjacentHTML("beforeend", markup);
+  }
+
+  const newCard = historyList.querySelector(`[data-job-id="${job.job_id}"]`);
+  if (newCard) hydrateMedia(newCard);
+}
+
+function rerenderActiveJobs() {
+  for (const job of jobs.values()) {
+    if (job.status === "running") {
+      upsertJobCard(job);
+    }
   }
 }
 
@@ -185,7 +382,7 @@ async function pollJob(jobId) {
         setActiveStatus("Задача в очереди...");
       }
       if (job.status === "running") {
-        setActiveStatus(`Генерация... ${job.progress_percent || 0}%`);
+        setActiveStatus(`Генерация... ${getEstimatedProgress(job)}%`);
       }
       if (job.status === "done") {
         clearInterval(timer);
@@ -218,6 +415,7 @@ function restoreHistory() {
       pollJob(job.job_id);
     }
   }
+  hydrateAllMedia();
 }
 
 async function bootstrapConfig() {
@@ -234,6 +432,24 @@ async function bootstrapConfig() {
     showNotice(errorNotice, `<h2>Нужна настройка</h2><p>${escapeHtml(error.message || "Ошибка подключения.")}</p>`);
   }
 }
+
+saveServerUrlButton?.addEventListener("click", async () => {
+  try {
+    saveApiBaseUrl(serverUrlField.value);
+    setServerUrlStatus("Адрес сохранён. Проверяю подключение...");
+    await bootstrapConfig();
+    historyList.innerHTML = "<div class=\"empty-history\">Историю можно обновить новым запросом или перезагрузкой страницы.</div>";
+  } catch (error) {
+    setServerUrlStatus(error.message || "Не удалось сохранить адрес.", true);
+  }
+});
+
+resetServerUrlButton?.addEventListener("click", async () => {
+  resetApiBaseUrl();
+  setServerUrlStatus("Адрес по умолчанию восстановлен.");
+  await bootstrapConfig();
+  historyList.innerHTML = "<div class=\"empty-history\">Историю можно обновить новым запросом или перезагрузкой страницы.</div>";
+});
 
 tierInputs.forEach((input) => input.addEventListener("change", syncPremiumVisibility));
 
@@ -278,6 +494,8 @@ form?.addEventListener("submit", async (event) => {
 });
 
 syncPremiumVisibility();
+refreshServerUrlField();
 clearBrokenHistory();
 restoreHistory();
 bootstrapConfig();
+setInterval(rerenderActiveJobs, 1000);
