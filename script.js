@@ -4,17 +4,11 @@ const promptField = document.getElementById("prompt");
 const generateButton = document.getElementById("generate-button");
 const activeStatus = document.getElementById("active-status");
 const historyList = document.getElementById("history-list");
-const setupNotice = document.getElementById("setup-notice");
 const errorNotice = document.getElementById("error-notice");
 const premiumPasswordWrap = document.getElementById("premium-password-wrap");
 const premiumPasswordField = document.getElementById("premium-password");
 const tierInputs = document.querySelectorAll('input[name="tier"]');
-const serverUrlField = document.getElementById("server-url");
-const saveServerUrlButton = document.getElementById("save-server-url");
-const resetServerUrlButton = document.getElementById("reset-server-url");
-const serverUrlStatus = document.getElementById("server-url-status");
 const HISTORY_STORAGE_KEY = "wan-site-api-history-v1";
-const API_BASE_URL_STORAGE_KEY = "wan-site-api-base-url-v1";
 
 const jobs = new Map();
 const activePollers = new Map();
@@ -29,20 +23,8 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
-function getDefaultApiBaseUrl() {
-  return String(config.apiBaseUrl || "").trim().replace(/\/$/, "");
-}
-
-function getSavedApiBaseUrl() {
-  try {
-    return String(localStorage.getItem(API_BASE_URL_STORAGE_KEY) || "").trim().replace(/\/$/, "");
-  } catch {
-    return "";
-  }
-}
-
 function getApiBaseUrl() {
-  return getSavedApiBaseUrl() || getDefaultApiBaseUrl();
+  return String(config.apiBaseUrl || "").trim().replace(/\/$/, "");
 }
 
 function resolveAssetUrl(value) {
@@ -70,12 +52,8 @@ function formatDuration(seconds) {
   const safe = Math.max(0, Math.round(Number(seconds || 0)));
   const minutes = Math.floor(safe / 60);
   const remainingSeconds = safe % 60;
-  if (minutes <= 0) {
-    return `${remainingSeconds} сек`;
-  }
-  if (remainingSeconds === 0) {
-    return `${minutes} мин`;
-  }
+  if (minutes <= 0) return `${remainingSeconds} сек`;
+  if (remainingSeconds === 0) return `${minutes} мин`;
   return `${minutes} мин ${remainingSeconds} сек`;
 }
 
@@ -97,46 +75,15 @@ function getEstimatedProgress(job) {
 }
 
 function getEstimatedProgressText(job) {
-  if (!job || job.status !== "running") {
-    return "";
-  }
+  if (!job || job.status !== "running") return "";
+
   const startedAt = parseDate(job.started_at);
   const estimatedTotal = Number(job.estimated_total_seconds || 0);
-  if (!startedAt || estimatedTotal <= 0) {
-    return "";
-  }
+  if (!startedAt || estimatedTotal <= 0) return "";
 
   const elapsedSeconds = Math.max(0, (Date.now() - startedAt.getTime()) / 1000);
   const remainingSeconds = Math.max(0, estimatedTotal - elapsedSeconds);
   return `Примерно осталось: ${formatDuration(remainingSeconds)}`;
-}
-
-function setServerUrlStatus(message, isError = false) {
-  if (!serverUrlStatus) return;
-  serverUrlStatus.textContent = message;
-  serverUrlStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
-}
-
-function refreshServerUrlField() {
-  if (!serverUrlField) return;
-  serverUrlField.value = getApiBaseUrl();
-  const isCustom = Boolean(getSavedApiBaseUrl());
-  setServerUrlStatus(isCustom ? "Используется твой сохранённый адрес сервера." : "Используется адрес по умолчанию.");
-}
-
-function saveApiBaseUrl(value) {
-  const normalized = String(value || "").trim().replace(/\/$/, "");
-  if (!/^https?:\/\//i.test(normalized)) {
-    throw new Error("Вставь полный адрес, например https://abcd.ngrok-free.app");
-  }
-  localStorage.setItem(API_BASE_URL_STORAGE_KEY, normalized);
-  refreshServerUrlField();
-  return normalized;
-}
-
-function resetApiBaseUrl() {
-  localStorage.removeItem(API_BASE_URL_STORAGE_KEY);
-  refreshServerUrlField();
 }
 
 function getSelectedTier() {
@@ -155,14 +102,16 @@ function setActiveStatus(text, isError = false) {
   activeStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
 }
 
-function showNotice(element, html) {
-  element.innerHTML = html;
-  element.classList.remove("hidden");
+function showErrorNotice(text) {
+  if (!errorNotice) return;
+  errorNotice.innerHTML = `<h2>Ошибка</h2><p>${escapeHtml(text)}</p>`;
+  errorNotice.classList.remove("hidden");
 }
 
-function hideNotice(element) {
-  element.innerHTML = "";
-  element.classList.add("hidden");
+function hideErrorNotice() {
+  if (!errorNotice) return;
+  errorNotice.innerHTML = "";
+  errorNotice.classList.add("hidden");
 }
 
 function apiUrl(path = "") {
@@ -202,9 +151,7 @@ function clearBrokenHistory() {
 
 async function fetchMediaBlob(remoteUrl) {
   if (!remoteUrl) return "";
-  if (mediaBlobUrls.has(remoteUrl)) {
-    return mediaBlobUrls.get(remoteUrl);
-  }
+  if (mediaBlobUrls.has(remoteUrl)) return mediaBlobUrls.get(remoteUrl);
 
   const response = await fetch(remoteUrl, {
     headers: {
@@ -218,7 +165,7 @@ async function fetchMediaBlob(remoteUrl) {
 
   const contentType = String(response.headers.get("content-type") || "").toLowerCase();
   if (contentType.includes("text/html") || contentType.includes("text/plain")) {
-    throw new Error("Сервер вместо видео вернул страницу или текст. Проверь ngrok и FastAPI.");
+    throw new Error("Сервер вместо видео вернул страницу или текст. Проверь FastAPI и ngrok.");
   }
 
   const blob = await response.blob();
@@ -262,9 +209,7 @@ async function hydrateMedia(card) {
 
 function hydrateAllMedia() {
   const cards = historyList.querySelectorAll(".history-card");
-  cards.forEach((card) => {
-    hydrateMedia(card);
-  });
+  cards.forEach((card) => hydrateMedia(card));
 }
 
 function renderJobCard(job) {
@@ -378,12 +323,8 @@ async function pollJob(jobId) {
       const job = data.job;
       upsertJobCard(job);
 
-      if (job.status === "queued") {
-        setActiveStatus("Задача в очереди...");
-      }
-      if (job.status === "running") {
-        setActiveStatus(`Генерация... ${getEstimatedProgress(job)}%`);
-      }
+      if (job.status === "queued") setActiveStatus("Задача в очереди...");
+      if (job.status === "running") setActiveStatus(`Генерация... ${getEstimatedProgress(job)}%`);
       if (job.status === "done") {
         clearInterval(timer);
         activePollers.delete(jobId);
@@ -411,45 +352,19 @@ function restoreHistory() {
   historyList.innerHTML = "";
   for (const job of savedJobs) {
     upsertJobCard(job);
-    if (job.status === "queued" || job.status === "running") {
-      pollJob(job.job_id);
-    }
+    if (job.status === "queued" || job.status === "running") pollJob(job.job_id);
   }
   hydrateAllMedia();
 }
 
 async function bootstrapConfig() {
   try {
-    const data = await fetchJson("/api/config");
-    hideNotice(errorNotice);
-
-    const notes = [];
-    notes.push(`<p>Сайт подключён к твоему серверу.</p>`);
-    notes.push(`<p class="small-note">Текущий адрес: ${escapeHtml(apiUrl())}</p>`);
-    notes.push(`<p class="small-note">Обычный режим: ${escapeHtml(String(data.default_fps || 8))} FPS, премиум: ${escapeHtml(String(data.premium_fps || 14))} FPS.</p>`);
-    showNotice(setupNotice, notes.join(""));
+    await fetchJson("/api/config");
+    hideErrorNotice();
   } catch (error) {
-    showNotice(errorNotice, `<h2>Нужна настройка</h2><p>${escapeHtml(error.message || "Ошибка подключения.")}</p>`);
+    showErrorNotice(error.message || "Ошибка подключения.");
   }
 }
-
-saveServerUrlButton?.addEventListener("click", async () => {
-  try {
-    saveApiBaseUrl(serverUrlField.value);
-    setServerUrlStatus("Адрес сохранён. Проверяю подключение...");
-    await bootstrapConfig();
-    historyList.innerHTML = "<div class=\"empty-history\">Историю можно обновить новым запросом или перезагрузкой страницы.</div>";
-  } catch (error) {
-    setServerUrlStatus(error.message || "Не удалось сохранить адрес.", true);
-  }
-});
-
-resetServerUrlButton?.addEventListener("click", async () => {
-  resetApiBaseUrl();
-  setServerUrlStatus("Адрес по умолчанию восстановлен.");
-  await bootstrapConfig();
-  historyList.innerHTML = "<div class=\"empty-history\">Историю можно обновить новым запросом или перезагрузкой страницы.</div>";
-});
 
 tierInputs.forEach((input) => input.addEventListener("change", syncPremiumVisibility));
 
@@ -480,6 +395,7 @@ form?.addEventListener("submit", async (event) => {
       body: JSON.stringify({ prompt, tier, password })
     });
 
+    hideErrorNotice();
     const job = data.job;
     upsertJobCard(job, true);
     setActiveStatus("Задача отправлена.");
@@ -487,6 +403,7 @@ form?.addEventListener("submit", async (event) => {
     premiumPasswordField.value = "";
     pollJob(job.job_id);
   } catch (error) {
+    showErrorNotice(error.message || "Ошибка отправки.");
     setActiveStatus(error.message || "Не удалось отправить prompt.", true);
   } finally {
     generateButton.disabled = false;
@@ -494,7 +411,6 @@ form?.addEventListener("submit", async (event) => {
 });
 
 syncPremiumVisibility();
-refreshServerUrlField();
 clearBrokenHistory();
 restoreHistory();
 bootstrapConfig();
